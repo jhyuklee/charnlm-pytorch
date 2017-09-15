@@ -12,8 +12,6 @@ class Dataset(object):
         self.idx2word = {}
         self.UNK = 'UNK'
         self.PAD = 'PAD'
-        self.max_wordlen = 0
-        self.max_sentlen = 0
         self.initialize_dictionary()
 
         self.train_data = self.process_data(
@@ -31,6 +29,9 @@ class Dataset(object):
         self.train_ptr = 0
         self.valid_ptr = 0
         self.test_ptr = 0
+        
+        print('char_dict', len(self.char2idx))
+        print('word_dict', len(self.word2idx), end='\n\n')
 
     def initialize_dictionary(self):
         self.char2idx[self.UNK] = 0
@@ -82,18 +83,22 @@ class Dataset(object):
                         self.update_dictionary(char, 'c')
                     for word in sentence.split():
                         self.update_dictionary(word, 'w')
+                    if max_wordlen > self.config.max_wordlen:
+                        self.config.max_wordlen = max_wordlen
+                    if max_sentlen > self.config.max_sentlen:
+                        self.config.max_sentlen = max_sentlen
                 
                 sentchar = []
                 for word in sentence.split():
                     sentchar.append(self.map_dictionary(word, self.char2idx))
                 sentword = self.map_dictionary(sentence.split(), self.word2idx)
-                assert len(sentword) == len(sentchar)
                 total_data.append([sentchar, sentword])
+                assert len(sentword) == len(sentchar)
 
-        if max_wordlen > self.max_wordlen:
-            self.max_wordlen = max_wordlen
-        if max_sentlen > self.max_sentlen:
-            self.max_sentlen = max_sentlen
+        if update_dict:
+            self.config.char_vocab_size = len(self.char2idx)
+            self.config.word_vocab_size = len(self.word2idx)
+            self.config.max_sentlen
 
         print('data size', len(total_data))
         print('max wordlen', max_wordlen)
@@ -104,17 +109,17 @@ class Dataset(object):
     def pad_data(self, dataset):
         for data in dataset:
             sentchar, sentword = data
-            # pad sentword (slide target to right)
-            while len(sentword) != self.max_sentlen + 1:
+            # pad sentword (will be slided to right)
+            while len(sentword) != self.config.max_sentlen + 1:
                 sentword.append(self.word2idx[self.PAD])
             # pad word in sentchar
             for word in sentchar:
-                while len(word) != self.max_wordlen:
+                while len(word) != self.config.max_wordlen:
                     word.append(self.char2idx[self.PAD])
             # pad sentchar
-            while len(sentchar) != len(sentword):
-                sentchar.append([self.char2idx[self.PAD]] * self.max_wordlen)
-            assert len(sentchar) == len(sentword)
+            while len(sentchar) != self.config.max_sentlen:
+                sentchar.append([self.char2idx[self.PAD]] * self.config.max_wordlen)
+            assert len(sentchar) == len(sentword) - 1
     
     def get_next_batch(self, mode='tr', batch_size=None, as_numpy=True):
         if batch_size is None:
@@ -148,6 +153,14 @@ class Dataset(object):
             targets = np.array(targets)
 
         return inputs, targets
+    
+    def get_batch_ptr(self, mode):
+        if mode == 'tr':
+            return self.train_ptr
+        elif mode == 'va':
+            return self.valid_ptr
+        elif mode == 'te':
+            return self.test_ptr
 
 
 if __name__ == '__main__':
