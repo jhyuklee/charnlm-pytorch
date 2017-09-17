@@ -14,16 +14,22 @@ def run_epoch(m, d, mode='tr', is_train=True):
 
     while True:
         optimizer.zero_grad()
-        inputs, targets = d.get_next_batch(mode=mode)
-        inputs, targets = (torch.LongTensor(inputs).cuda(), 
-                torch.LongTensor(targets).cuda())
-        inputs, targets = Variable(inputs), Variable(targets)
-
+        inputs, targets, lengths = d.get_next_batch(mode=mode)
+        inputs, targets, lengths = (
+                Variable(torch.LongTensor(inputs).cuda()),
+                Variable(torch.LongTensor(targets).cuda()),
+                Variable(torch.LongTensor(lengths).cuda()))
+        
+        mask = m.create_mask(lengths-1, m.config.max_sentlen) # adjust targets later
         m.hidden = m.init_hidden(inputs.size(0))
         outputs = m(inputs)
         targets = targets.view(-1)
-        
+        o_mask = torch.unsqueeze(mask.view(-1), 1).expand_as(outputs)
+        outputs = torch.masked_select(outputs, o_mask).view(
+                -1, m.config.word_vocab_size)
+        targets = torch.masked_select(targets, mask.view(-1))
         loss = criterion(outputs, targets)
+        
         if is_train:
             loss.backward()
             optimizer.step()

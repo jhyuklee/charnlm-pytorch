@@ -92,7 +92,8 @@ class Dataset(object):
                 for word in sentence.split():
                     sentchar.append(self.map_dictionary(word, self.char2idx))
                 sentword = self.map_dictionary(sentence.split(), self.word2idx)
-                total_data.append([sentchar, sentword])
+                length = len(sentword)
+                total_data.append([sentchar, sentword, length])
                 assert len(sentword) == len(sentchar)
 
         if update_dict:
@@ -108,7 +109,7 @@ class Dataset(object):
 
     def pad_data(self, dataset):
         for data in dataset:
-            sentchar, sentword = data
+            sentchar, sentword, _ = data
             # pad sentword (will be slided to right)
             while len(sentword) != self.config.max_sentlen + 1:
                 sentword.append(self.word2idx[self.PAD])
@@ -140,6 +141,7 @@ class Dataset(object):
                 else len(data) - ptr)
         inputs = [d[0] for d in data[ptr:ptr+batch_size]]
         targets = [d[1][1:] for d in data[ptr:ptr+batch_size]]
+        lengths = [d[2] for d in data[ptr:ptr+batch_size]]
         
         if mode == 'tr':
             self.train_ptr = (ptr + batch_size) % len(data)
@@ -151,8 +153,9 @@ class Dataset(object):
         if as_numpy:
             inputs = np.array(inputs)
             targets = np.array(targets)
+            lengths = np.array(lengths)
 
-        return inputs, targets
+        return inputs, targets, lengths
     
     def get_batch_ptr(self, mode):
         if mode == 'tr':

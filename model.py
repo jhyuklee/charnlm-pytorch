@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.autograd as autograd
 import torch.optim as optim
 import torch.nn.functional as F
+import numpy as np
 import sys
 
 
@@ -23,6 +24,15 @@ class Char_NLM(nn.Module):
                     1, batch_size, self.config.hidden_dim)).cuda(),
                 autograd.Variable(torch.zeros(
                     1, batch_size, self.config.hidden_dim)).cuda())
+
+    def create_mask(self, lengths, max_length):
+        r = torch.unsqueeze(torch.arange(0, max_length), 0).long().cuda() # (1, 82)
+        # print(r)
+        l = torch.unsqueeze(lengths, 1).expand(lengths.size(0), max_length) # (20, 82)
+        # print(l)
+        mask = torch.lt(r.expand_as(l), l)
+        # print(mask)
+        return mask
 
     def forward(self, inputs):
         # print(inputs.size())
