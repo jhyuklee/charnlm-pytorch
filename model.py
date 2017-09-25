@@ -19,7 +19,10 @@ class Char_NLM(nn.Module):
                 stride=1) for i in range(len(config.char_conv_fn))])
         self.input_dim = int(np.sum(config.char_conv_fn)) 
         self.lstm = nn.LSTM(self.input_dim, config.hidden_dim, config.layer_num)
-        self.linear1 = nn.Linear(config.hidden_dim, config.word_vocab_size)
+
+        self.hw_nonl = nn.Linear(config.hidden_dim, config.hidden_dim)
+        self.hw_gate = nn.Linear(config.hidden_dim, config.hidden_dim)
+        self.fc1 = nn.Linear(config.hidden_dim, config.word_vocab_size)
     
     def init_hidden(self, batch_size):
         return (autograd.Variable(torch.zeros(
@@ -27,17 +30,9 @@ class Char_NLM(nn.Module):
                 autograd.Variable(torch.zeros(
                     self.config.layer_num, batch_size, self.config.hidden_dim)).cuda())
 
-    # deprecated but can be useful
-    def create_mask(self, lengths, max_length):
-        r = torch.unsqueeze(torch.arange(0, max_length), 0).long().cuda() # (1, 82)
-        l = torch.unsqueeze(lengths, 1).expand(lengths.size(0), max_length) # (20, 82)
-        mask = torch.lt(r.expand_as(l), l)
-        return mask
-
-    def forward(self, inputs):
+    def char_conv_layer(self, inputs):
         embeds = self.char_embed(inputs.view(-1, self.config.max_wordlen))
         embeds = torch.transpose(torch.unsqueeze(embeds, 2), 1, 3).contiguous()
-
         conv_result = []
         for i, conv in enumerate(self.char_conv):
             char_conv = torch.squeeze(conv(embeds))
@@ -45,11 +40,31 @@ class Char_NLM(nn.Module):
             char_mp = char_mp.view(-1, self.config.max_sentlen, char_mp.size(1))
             conv_result.append(char_mp)
         conv_result = torch.cat(conv_result, 2)
-        
-        lstm_out, self.hidden = self.lstm(torch.transpose(conv_result, 0, 1),
+        return conv_result
+
+    def rnn_layer(self, inputs):
+        lstm_out, self.hidden = self.lstm(torch.transpose(inputs, 0, 1),
                 self.hidden)
         # print(self.hidden[0][self.config.layer_num-1,:,:].size())
-        outputs = self.linear1(self.hidden[0][self.config.layer_num-1,:,:])
-        
+        return self.hidden[0][self.config.layer_num-1,:,:]
+
+    def highway_layer(self, inputs):
+        nonl = F.relu(self.hw_nonl(inputs))
+        gate = F.sigmoid(self.hw_gate(inputs))
+        z = torch.mul(gate, nonl) + torch.mul(1-gate, inputs)
+        return z
+
+    def forward(self, inputs):
+        char_conv = self.char_conv_layer(inputs)
+        final_hidden = self.rnn_layer(char_conv)
+        highway = self.highway_layer(final_hidden)
+        outputs = self.fc1(highway)
         return outputs
+
+    # deprecated but can be useful
+    def create_mask(self, lengths, max_length):
+        r = torch.unsqueeze(torch.arange(0, max_length), 0).long().cuda() # (1, 82)
+        l = torch.unsqueeze(lengths, 1).expand(lengths.size(0), max_length) # (20, 82)
+        mask = torch.lt(r.expand_as(l), l)
+        return mask
 

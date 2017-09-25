@@ -99,7 +99,7 @@ class Dataset(object):
     def process_data(self, corpus, update_dict=False):
         print('processing corpus %d' % len(corpus))
         total_data = []
-        max_wordlen = max_sentlen = 0
+        max_wordlen = 0
 
         for k, word in enumerate(corpus):
             sentence = []
@@ -137,7 +137,7 @@ class Dataset(object):
                     sentchar.append(self.map_dictionary(word, self.char2idx))
             sentword = self.map_dictionary(sentence, self.word2idx)
             length = len(sentword)
-            assert len(sentword) == len(sentchar)
+            assert len(sentword) == len(sentchar) == self.config.max_sentlen
             total_data.append([sentchar, sentword[-1], length])
 
         if update_dict:
@@ -145,25 +145,17 @@ class Dataset(object):
             self.config.word_vocab_size = len(self.word2idx)
 
         print('data size', len(total_data))
-        print('max wordlen', max_wordlen)
-        print('max sentlen', max_sentlen, end='\n\n')
+        print('max wordlen', max_wordlen, end='\n\n')
 
         return total_data
 
     def pad_data(self, dataset):
         for data in dataset:
             sentchar, sentword, _ = data
-            # pad sentword
-            while len(sentword) != self.config.max_sentlen:
-                sentword.append(self.word2idx[self.PAD])
             # pad word in sentchar
             for word in sentchar:
                 while len(word) != self.config.max_wordlen:
                     word.append(self.char2idx[self.PAD])
-            # pad sentchar
-            while len(sentchar) != self.config.max_sentlen:
-                sentchar.append([self.char2idx[self.PAD]] * self.config.max_wordlen)
-            assert len(sentchar) == len(sentword)
     
     def get_next_batch(self, mode='tr', batch_size=None, as_numpy=True):
         if batch_size is None:
@@ -182,7 +174,7 @@ class Dataset(object):
         batch_size = (batch_size if ptr + batch_size <= len(data)
                 else len(data) - ptr)
         inputs = [d[0] for d in data[ptr:ptr+batch_size]]
-        targets = [d[1][1:] for d in data[ptr:ptr+batch_size]]
+        targets = [d[1] for d in data[ptr:ptr+batch_size]]
         lengths = [d[2] for d in data[ptr:ptr+batch_size]]
         
         if mode == 'tr':
@@ -228,7 +220,7 @@ class Config(object):
         self.max_sentlen = 35
         self.char_vocab_size = 0
         self.word_vocab_size = 0
-        self.save_preprocess = True
+        self.save_preprocess = False
         self.preprocess_save_path = './data/preprocess(tmp).pkl'
         self.preprocess_load_path = './data/preprocess(tmp).pkl'
 
