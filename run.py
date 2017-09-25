@@ -10,7 +10,7 @@ def run_epoch(m, d, mode='tr', is_train=True):
     print_step = 100
     run_step = 0.0
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(m.parameters(), lr=0.1)
+    optimizer = optim.SGD(m.parameters(), lr=1.0)
 
     while True:
         optimizer.zero_grad()
@@ -20,16 +20,14 @@ def run_epoch(m, d, mode='tr', is_train=True):
                 Variable(torch.LongTensor(targets).cuda()),
                 Variable(torch.LongTensor(lengths).cuda()))
         
-        mask = m.create_mask(lengths-1, m.config.max_sentlen) # adjust targets later
+        if is_train:
+            m.train()
+        else:
+            m.eval()
+
         m.hidden = m.init_hidden(inputs.size(0))
         outputs = m(inputs)
-        targets = targets.view(-1)
-        o_mask = torch.unsqueeze(mask.view(-1), 1).expand_as(outputs)
-        outputs = torch.masked_select(outputs, o_mask).view(
-                -1, m.config.word_vocab_size)
-        targets = torch.masked_select(targets, mask.view(-1))
         loss = criterion(outputs, targets)
-        
         if is_train:
             loss.backward()
             optimizer.step()
