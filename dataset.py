@@ -3,6 +3,7 @@ import sys
 import nltk
 import pickle
 import pprint
+import copy
 
 nltk.download('punkt')
 
@@ -20,13 +21,10 @@ class Dataset(object):
                 self.train_corpus, 
                 update_dict=True)
         self.valid_data = self.process_data(
-                self.valid_corpus)
+                self.valid_corpus,
+                update_dict=True)
         self.test_data = self.process_data(
                 self.test_corpus)
-
-        self.pad_data(self.train_data)
-        self.pad_data(self.valid_data)
-        self.pad_data(self.test_data)
 
         self.train_ptr = 0
         self.valid_ptr = 0
@@ -46,18 +44,24 @@ class Dataset(object):
         self.UNK = '<unk>'
         self.PAD = 'PAD'
         self.CONJ = '+'
+        self.START = '{'
+        self.END = '}'
         self.char2idx[self.UNK] = 0
         self.char2idx[self.PAD] = 1
         self.char2idx[self.CONJ] = 2
+        self.char2idx[self.START] = 3
+        self.char2idx[self.END] = 4
         self.idx2char[0] = self.UNK
         self.idx2char[1] = self.PAD
         self.idx2char[2] = self.CONJ
+        self.idx2char[3] = self.START
+        self.idx2char[4] = self.END
         self.word2idx[self.UNK] = 0
         self.word2idx[self.PAD] = 1
         self.word2idx[self.CONJ] = 2
         self.idx2word[0] = self.UNK
         self.idx2word[1] = self.PAD
-        self.word2idx[2] = self.CONJ
+        self.idx2word[2] = self.CONJ
     
     def update_dictionary(self, key, mode=None):
         if mode == 'c':
@@ -93,7 +97,7 @@ class Dataset(object):
                 # sentence_split = nltk.word_tokenize(line[:-1])
                 sentence_split = line[:-1].split()
                 for word in sentence_split:
-                    corpus.append(word)
+                    corpus.append(self.START + word + self.END)
                 corpus.append(self.CONJ)
 
     def process_data(self, corpus, update_dict=False):
@@ -102,16 +106,16 @@ class Dataset(object):
         max_wordlen = 0
 
         for k, word in enumerate(corpus):
+            target = word
             sentence = []
-            if k < self.config.max_sentlen - 1:
-                while len(sentence) != self.config.max_sentlen - 1 - k:
+            if k < self.config.max_sentlen:
+                while len(sentence) != self.config.max_sentlen - k:
                     sentence.append(self.PAD)
-                sentence = sentence + corpus[0:k+1]
-                # print(len(sentence), sentence)
+                sentence = sentence + corpus[0:k]
+                # print(len(sentence), sentence, target)
             else:
-                sentence = corpus[k-self.config.max_sentlen+1:k+1]
-                # print('here', len(sentence), sentence)
-                # sys.exit()
+                sentence = corpus[k-self.config.max_sentlen:k]
+                # print('here', len(sentence), sentence, target)
 
             # count max length
             sentence_char = ' '.join(sentence) 
@@ -120,6 +124,7 @@ class Dataset(object):
                         if len(word) > max_wordlen else max_wordlen)
 
             if update_dict:
+                self.update_dictionary(target, 'w')
                 for char in sentence_char:
                     self.update_dictionary(char, 'c')
                 for word in sentence:
@@ -135,10 +140,14 @@ class Dataset(object):
                     sentchar.append([self.char2idx[self.UNK]]) 
                 else:
                     sentchar.append(self.map_dictionary(word, self.char2idx))
-            sentword = self.map_dictionary(sentence, self.word2idx)
-            length = len(sentword)
-            assert len(sentword) == len(sentchar) == self.config.max_sentlen
-            total_data.append([sentchar, sentword[-1], length])
+            if target in self.word2idx:
+                target = self.word2idx[target]
+            else:
+                target = self.word2idx[self.UNK]
+            length = len(sentchar)
+
+            assert len(sentchar) == self.config.max_sentlen
+            total_data.append([sentchar, target, length])
 
         if update_dict:
             self.config.char_vocab_size = len(self.char2idx)
@@ -156,8 +165,10 @@ class Dataset(object):
             for word in sentchar:
                 while len(word) != self.config.max_wordlen:
                     word.append(self.char2idx[self.PAD])
+
+        return dataset
     
-    def get_next_batch(self, mode='tr', batch_size=None, as_numpy=True):
+    def get_next_batch(self, mode='tr', batch_size=None, as_numpy=True, pad=True):
         if batch_size is None:
             batch_size = self.config.batch_size
         
@@ -173,9 +184,13 @@ class Dataset(object):
         
         batch_size = (batch_size if ptr + batch_size <= len(data)
                 else len(data) - ptr)
-        inputs = [d[0] for d in data[ptr:ptr+batch_size]]
-        targets = [d[1] for d in data[ptr:ptr+batch_size]]
-        lengths = [d[2] for d in data[ptr:ptr+batch_size]]
+        if pad:
+            padded_data = self.pad_data(copy.deepcopy(data[ptr:ptr+batch_size]))
+        else:
+            padded_data = data[ptr:ptr+batch_size]
+        inputs = [d[0] for d in padded_data]
+        targets = [d[1] for d in padded_data]
+        lengths = [d[2] for d in padded_data]
         
         if mode == 'tr':
             self.train_ptr = (ptr + batch_size) % len(data)
@@ -220,7 +235,7 @@ class Config(object):
         self.max_sentlen = 35
         self.char_vocab_size = 0
         self.word_vocab_size = 0
-        self.save_preprocess = False
+        self.save_preprocess = True
         self.preprocess_save_path = './data/preprocess(tmp).pkl'
         self.preprocess_load_path = './data/preprocess(tmp).pkl'
 
@@ -238,13 +253,18 @@ if __name__ == '__main__':
     pp = lambda x: pprint.PrettyPrinter().pprint(x)
     pp(([(k,v) for k, v in vars(dataset.config).items() if '__' not in k]))
     print()
-    """
-    input, target = dataset.get_next_batch(batch_size=1)
+    
+    input, target, l = dataset.get_next_batch(batch_size=1)
     print([dataset.map_dictionary(i, dataset.idx2char) for i in input[0]])
-    print(dataset.map_dictionary(target[0], dataset.idx2word))
-    """
+    print(dataset.idx2word[target[0]])
+    print()
+    dataset.shuffle_data()
+    input, target, l = dataset.get_next_batch(batch_size=1)
+    print([dataset.map_dictionary(i, dataset.idx2char) for i in input[0]])
+    print(dataset.idx2word[target[0]])
+   
     while True:
-        i, t, l = dataset.get_next_batch(batch_size=300, mode='va')
+        i, t, l = dataset.get_next_batch(batch_size=3000, mode='va')
         print(dataset.valid_ptr, len(i))
         if dataset.valid_ptr == 0:
             print('\niteration test pass!')
