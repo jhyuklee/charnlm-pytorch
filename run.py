@@ -7,27 +7,27 @@ from torch.autograd import Variable
 
 def run_epoch(m, d, mode='tr', is_train=True):
     running_loss = total_loss = 0.0
-    print_step = 100
+    print_step = 10
     run_step = total_step = 0.0
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(m.parameters(), lr=m.config.lr)
+    optimizer = optim.Adam(m.parameters(), lr=m.config.lr)
+    m.hidden = m.init_hidden(m.config.batch_size)
 
     while True:
         optimizer.zero_grad()
-        inputs, targets, lengths = d.get_next_batch(mode=mode, pad=True)
-        inputs, targets, lengths = (
+        inputs, targets = d.get_next_batch(m.config.seq_len, mode=mode)
+        inputs, targets = (
                 Variable(torch.LongTensor(inputs).cuda()),
-                Variable(torch.LongTensor(targets).cuda()),
-                Variable(torch.LongTensor(lengths).cuda()))
+                Variable(torch.LongTensor(targets).cuda()))
         
         if is_train:
             m.train()
         else:
             m.eval()
 
-        m.hidden = m.init_hidden(inputs.size(0))
-        outputs = m(inputs)
-        loss = criterion(outputs, targets)
+        m.hidden = [state.detach() for state in m.hidden]
+        outputs, m.hidden = m(inputs, m.hidden)
+        loss = criterion(outputs, targets.view(-1))
         if is_train:
             loss.backward()
             nn.utils.clip_grad_norm(m.parameters(), m.config.rnn_max_norm)
@@ -39,8 +39,8 @@ def run_epoch(m, d, mode='tr', is_train=True):
         total_step += 1.0
 
         if (d.get_batch_ptr(mode)) % (m.config.batch_size * print_step) == 0:
-            print('[%d] loss: %.3f batch_size: %d' % (d.get_batch_ptr(mode), 
-                        running_loss / run_step, inputs.size(0)))
+            print('[%d] loss: %.3f seq_len: %d' % (d.get_batch_ptr(mode), 
+                        running_loss / run_step, inputs.size(1)))
             run_step = 0
             running_loss = 0
         

@@ -19,7 +19,7 @@ class Char_NLM(nn.Module):
                 stride=1) for i in range(len(config.char_conv_fn))])
         self.input_dim = int(np.sum(config.char_conv_fn)) 
         self.lstm = nn.LSTM(self.input_dim, config.hidden_dim, config.layer_num,
-                dropout=config.rnn_dr)
+                dropout=config.rnn_dr, batch_first=True)
 
         self.hw_nonl = nn.Linear(config.hidden_dim, config.hidden_dim)
         self.hw_gate = nn.Linear(config.hidden_dim, config.hidden_dim)
@@ -59,16 +59,14 @@ class Char_NLM(nn.Module):
         for i, conv in enumerate(self.char_conv):
             char_conv = torch.squeeze(conv(embeds))
             char_mp = torch.max(torch.tanh(char_conv), 2)[0]
-            char_mp = char_mp.view(-1, self.config.max_sentlen, char_mp.size(1))
+            char_mp = char_mp.view(-1, inputs.size(1), char_mp.size(1))
             conv_result.append(char_mp)
         conv_result = torch.cat(conv_result, 2)
         return conv_result
 
-    def rnn_layer(self, inputs):
-        lstm_out, self.hidden = self.lstm(torch.transpose(inputs, 0, 1),
-                self.hidden)
-        # print(self.hidden[0][self.config.layer_num-1,:,:].size())
-        return self.hidden[0][self.config.layer_num-1,:,:]
+    def rnn_layer(self, inputs, hidden):
+        lstm_out, hidden = self.lstm(inputs, hidden)
+        return lstm_out.contiguous().view(-1, self.config.hidden_dim), hidden
 
     def highway_layer(self, inputs):
         nonl = F.relu(self.hw_nonl(inputs))
@@ -76,12 +74,12 @@ class Char_NLM(nn.Module):
         z = torch.mul(gate, nonl) + torch.mul(1-gate, inputs)
         return z
 
-    def forward(self, inputs):
+    def forward(self, inputs, hidden):
         char_conv = self.char_conv_layer(inputs)
-        final_hidden = self.rnn_layer(char_conv)
-        highway = self.highway_layer(final_hidden)
+        out, hidden = self.rnn_layer(char_conv, hidden)
+        highway = self.highway_layer(out)
         outputs = self.fc1(highway)
-        return outputs
+        return outputs, hidden
 
     # deprecated but can be useful
     def create_mask(self, lengths, max_length):
