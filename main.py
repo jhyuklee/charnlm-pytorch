@@ -10,13 +10,17 @@ from run import run_epoch
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--data_path', type=str, default='./data/preprocess(tmp).pkl')
-argparser.add_argument('--epoch', type=int, default=40)
+argparser.add_argument('--checkpoint_path', type=str, default='./results/test.pth')
+argparser.add_argument('--load_path', type=str, default='./results/test.pth')
+argparser.add_argument('--epoch', type=int, default=25)
 argparser.add_argument('--train', action='store_true', default=True)
 argparser.add_argument('--valid', action='store_true', default=True)
 argparser.add_argument('--test', action='store_true', default=True)
+argparser.add_argument('--save', action='store_true', default=False)
+argparser.add_argument('--resume', action='store_true', default=False)
 
 argparser.add_argument('--seq_len', type=float, default=35)
-argparser.add_argument('--lr', type=float, default=1e-4)
+argparser.add_argument('--lr', type=float, default=1.0)
 argparser.add_argument('--hidden_dim', type=int, default=300)
 argparser.add_argument('--layer_num', type=int, default=2)
 argparser.add_argument('--rnn_dr', type=float, default=0.5)
@@ -30,6 +34,9 @@ args = argparser.parse_args()
 
 
 def run_experiment(model, dataset):
+    if model.config.resume:
+        model.load_checkpoint()
+
     if model.config.train:
         print('##### Training #####')
         prev_vloss = 99999
@@ -39,11 +46,11 @@ def run_experiment(model, dataset):
 
             if model.config.valid:
                 print('##### Validation #####')
-                vloss = run_epoch(model, dataset, 'va', is_train=False)
+                vloss = run_epoch(model, dataset, 'va', is_train=True)
                 if vloss < prev_vloss - 1:
                     prev_vloss = vloss
                 else:
-                    model.config.lr /= 2
+                    model.decay_lr()
                     print('learning rate decay to %.3f' % model.config.lr)
     
     if model.config.test:
@@ -62,7 +69,7 @@ def main():
     pp(vars(dataset.config))
     print('train', dataset.train_data[0].shape)
     print('valid', dataset.valid_data[0].shape)
-    print('data', dataset.test_data[0].shape)
+    print('test', dataset.test_data[0].shape)
     print()
 
     model = Char_NLM(args).cuda()

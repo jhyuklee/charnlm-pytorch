@@ -25,6 +25,10 @@ class Char_NLM(nn.Module):
         self.hw_gate = nn.Linear(config.hidden_dim, config.hidden_dim)
         self.fc1 = nn.Linear(config.hidden_dim, config.word_vocab_size)
 
+        self.init_weights()
+        self.hidden = self.init_hidden(config.batch_size)
+        self.criterion = nn.CrossEntropyLoss()
+        self.optimizer = optim.SGD(self.parameters(), lr=config.lr)
         self.model_params(debug=False)
     
     def init_hidden(self, batch_size):
@@ -32,6 +36,18 @@ class Char_NLM(nn.Module):
                     self.config.layer_num, batch_size, self.config.hidden_dim)).cuda(),
                 autograd.Variable(torch.zeros(
                     self.config.layer_num, batch_size, self.config.hidden_dim)).cuda())
+
+    def init_weights(self):
+        # self.char_embed.weight.data.uniform_(-0.05, 0.05)
+        # for conv in self.char_conv:
+        #     conv.weight.data.uniform_(-0.05, 0.05)
+        #     conv.bias.data.fill_(0)
+        # self.hw_nonl.weight.data.uniform_(-0.05, 0.05)
+        # self.hw_nonl.bias.data.fill_(0)
+        # self.hw_gate.weight.data.uniform_(-0.05, 0.05)
+        self.hw_gate.bias.data.uniform_(-2.05, 2.05)
+        # self.fc1.weight.data.uniform_(-0.05, 0.05)
+        # self.fc1.bias.data.fill_(0)
 
     def model_params(self, debug=True):
         print('### model parameters')
@@ -80,6 +96,25 @@ class Char_NLM(nn.Module):
         highway = self.highway_layer(out)
         outputs = self.fc1(highway)
         return outputs, hidden
+
+    def decay_lr(self):
+        self.config.lr /= 2
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = self.config.lr
+
+    def save_checkpoint(self, state, is_best, filename=None):
+        if filename is None:
+            filename = self.config.checkpoint_path
+        # print('### save checkpoint %s' % filename)
+        torch.save(state, filename)
+
+    def load_checkpoint(self, filename=None):
+        if filename is None:
+            filename = self.config.load_path
+        print('### load checkpoint %s' % filename)
+        checkpoint = torch.load(filename)
+        self.load_state_dict(checkpoint['state_dict'])
+        self.optimizer.load_state_dict(checkpoint['optimizer'])
 
     # deprecated but can be useful
     def create_mask(self, lengths, max_length):

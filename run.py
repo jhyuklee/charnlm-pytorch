@@ -9,12 +9,9 @@ def run_epoch(m, d, mode='tr', is_train=True):
     running_loss = total_loss = 0.0
     print_step = 10
     run_step = total_step = 0.0
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(m.parameters(), lr=m.config.lr)
-    m.hidden = m.init_hidden(m.config.batch_size)
 
     while True:
-        optimizer.zero_grad()
+        m.optimizer.zero_grad()
         inputs, targets = d.get_next_batch(m.config.seq_len, mode=mode)
         inputs, targets = (
                 Variable(torch.LongTensor(inputs).cuda()),
@@ -27,11 +24,11 @@ def run_epoch(m, d, mode='tr', is_train=True):
 
         m.hidden = [state.detach() for state in m.hidden]
         outputs, m.hidden = m(inputs, m.hidden)
-        loss = criterion(outputs, targets.view(-1))
+        loss = m.criterion(outputs, targets.view(-1))
         if is_train:
             loss.backward()
             nn.utils.clip_grad_norm(m.parameters(), m.config.rnn_max_norm)
-            optimizer.step()
+            m.optimizer.step()
 
         running_loss += np.exp(loss.data[0])
         run_step += 1.0
@@ -43,6 +40,13 @@ def run_epoch(m, d, mode='tr', is_train=True):
                         running_loss / run_step, inputs.size(1)))
             run_step = 0
             running_loss = 0
+            if m.config.save:
+                m.save_checkpoint({
+                    'config': m.config,
+                    'state_dict': m.state_dict(),
+                    'optimizer': m.optimizer.state_dict(),
+                }, False)
+
         
         if d.get_batch_ptr(mode) == 0:
             print('total loss: %.3f\n' % (total_loss / total_step))

@@ -187,7 +187,6 @@ class Dataset(object):
         
         if len(data[0][0]) - (ptr + seq_len) == 1: # last batch
             ptr += 1
-            print('last')
 
         if mode == 'tr':
             self.train_ptr = (ptr + seq_len) % len(data[0][0])
@@ -216,7 +215,7 @@ class Config(object):
         self.max_wordlen = 0
         self.char_vocab_size = 0
         self.word_vocab_size = 0
-        self.save_preprocess = False
+        self.save_preprocess = True
         self.preprocess_save_path = './data/preprocess(tmp).pkl'
         self.preprocess_load_path = './data/preprocess(tmp).pkl'
 
@@ -246,7 +245,7 @@ if __name__ == '__main__':
 
     print('train', dataset.train_data[0].shape)
     print('valid', dataset.valid_data[0].shape)
-    print('data', dataset.test_data[0].shape)
+    print('test', dataset.test_data[0].shape)
    
     while True:
         i, t = dataset.get_next_batch(seq_len=100, mode='te')
