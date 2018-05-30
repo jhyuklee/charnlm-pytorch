@@ -21,8 +21,8 @@ class Char_NLM(nn.Module):
         self.lstm = nn.LSTM(self.input_dim, config.hidden_dim, config.layer_num,
                 dropout=config.rnn_dr, batch_first=True)
 
-        self.hw_nonl = nn.Linear(config.hidden_dim, config.hidden_dim)
-        self.hw_gate = nn.Linear(config.hidden_dim, config.hidden_dim)
+        self.hw_nonl = nn.Linear(self.input_dim, self.input_dim)
+        self.hw_gate = nn.Linear(self.input_dim, self.input_dim)
         self.fc1 = nn.Linear(config.hidden_dim, config.word_vocab_size)
 
         self.init_weights()
@@ -92,9 +92,9 @@ class Char_NLM(nn.Module):
 
     def forward(self, inputs, hidden):
         char_conv = self.char_conv_layer(inputs)
-        out, hidden = self.rnn_layer(char_conv, hidden)
-        highway = self.highway_layer(out)
-        outputs = self.fc1(highway)
+        high_out = self.highway_layer(char_conv)
+        out, hidden = self.rnn_layer(high_out, hidden)
+        outputs = self.fc1(out)
         return outputs, hidden
 
     def decay_lr(self):

@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import sys
 import nltk
 import pickle
@@ -208,9 +209,10 @@ class Dataset(object):
 
 class Config(object):
     def __init__(self):
-        self.train_path = './data/train.txt'
-        self.valid_path = './data/valid.txt'
-        self.test_path = './data/test.txt'
+        user_home = os.path.expanduser('~')
+        self.train_path = os.path.join(user_home, 'datasets/ptb/train.txt')
+        self.valid_path = os.path.join(user_home, 'datasets/ptb/valid.txt')
+        self.test_path = os.path.join(user_home, 'datasets/ptb/test.txt')
         self.batch_size = 20
         self.max_wordlen = 0
         self.char_vocab_size = 0
