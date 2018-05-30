@@ -223,6 +223,9 @@ class Config(object):
 
 
 if __name__ == '__main__':
+    if not os.path.exists('./data'):
+        os.makedirs('./data')
+
     config = Config()
     if config.save_preprocess:
         dataset = Dataset(config)
