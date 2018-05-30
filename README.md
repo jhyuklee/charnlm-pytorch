@@ -22,8 +22,8 @@ $ python dataset.py
 # Train and test with default settings (LSTM-Char-Small)
 $ python main.py
 
-# Train with different number of hidden units and epoch
-$ python main.py --hidden_dim 200 --epochs 20
+# Train with different number of hidden units and epochs
+$ python main.py --hidden_dim 200 --epoch 20
 ```
 
 ## Model structure
